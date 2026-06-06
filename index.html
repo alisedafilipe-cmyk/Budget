@@ -238,10 +238,16 @@
         const currentExps = [];
         let currentName = "📌 Current Semester";
 
+        // Initialize all four-year semesters
+        for (let semName of fourYearSemesters) {
+            fourMap.set(semName, []);
+        }
+
         for (let rec of records) {
             const f = rec.fields;
+            const type = f.Type || 'fouryear';
             const semester = f.Semester || '';
-            const type = f.Type || (fourYearSemesters.includes(semester) ? 'fouryear' : 'current');
+            
             const expense = {
                 id: rec.id,
                 desc: f.Expense || '',
@@ -250,15 +256,21 @@
                 status: f.Status || 'pending',
                 comment: f.Comment || ''
             };
+
+            // Only treat as current if Type is explicitly 'current'
             if (type === 'current') {
-                if (semester) currentName = semester;
                 currentExps.push(expense);
+                if (semester) currentName = semester;
             } else {
-                if (!fourMap.has(semester)) fourMap.set(semester, []);
-                fourMap.get(semester).push(expense);
+                // All others go to 4-year
+                if (fourMap.has(semester)) {
+                    fourMap.get(semester).push(expense);
+                }
             }
         }
+
         currentSemester = { name: currentName, expenses: currentExps };
+        
         const fourYear = [];
         for (let semName of fourYearSemesters) {
             let exps = fourMap.get(semName) || [];
@@ -280,11 +292,15 @@
         updateSyncIndicator('syncing');
         try {
             const all = [];
+            
+            // Add 4-year expenses
             for (let sem of fourYearData) {
                 for (let exp of sem.expenses) {
                     all.push({ ...exp, semester: sem.name, type: 'fouryear' });
                 }
             }
+            
+            // Add current semester expenses
             for (let exp of currentSemester.expenses) {
                 all.push({ ...exp, semester: currentSemester.name, type: 'current' });
             }

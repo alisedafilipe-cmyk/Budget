@@ -142,8 +142,10 @@
     let charts = {};
     let syncTimeout = null;
     let pollInterval = null;
-    let lastRemoteHash = null;
+    let pendingChanges = {};
+    let isSyncing = false;
     let isLoading = false;
+    let lastSyncTime = 0;
 
     function updateSyncIndicator(status = 'ready', message = null) {
         const indicator = document.getElementById('syncIndicator');
@@ -158,22 +160,13 @@
             setTimeout(() => updateSyncIndicator('ready'), 3000);
         } else if (status === 'success') {
             indicator.textContent = '✅ Synced';
-            setTimeout(() => updateSyncIndicator('ready'), 2000);
+            setTimeout(() => updateSyncIndicator('ready'), 1000);
         } else {
             indicator.textContent = '✅ Ready';
         }
     }
 
-    function computeDataHash(data) {
-        return JSON.stringify(data).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0).toString();
-    }
-
-    async function debouncedSync() {
-        clearTimeout(syncTimeout);
-        syncTimeout = setTimeout(() => syncToCloud(), 800);
-    }
-
-    async function airtableRequest(method, endpoint, body = null) {
+    async function airtableRequest(method, endpoint, body = null, retries = 3) {
         const url = `https://api.airtable.com/v0/${BASE_ID}/${TABLE}${endpoint ? '/' + endpoint : ''}`;
         const options = { 
             method, 
@@ -184,12 +177,24 @@
         };
         if (body) options.body = JSON.stringify(body);
         
-        const res = await fetch(url, options);
-        if (!res.ok) {
-            const errorText = await res.text();
-            throw new Error(`HTTP ${res.status}: ${errorText}`);
+        for (let attempt = 0; attempt < retries; attempt++) {
+            try {
+                const res = await fetch(url, options);
+                if (res.status === 429) { // Rate limited
+                    const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
+                    await new Promise(r => setTimeout(r, waitTime));
+                    continue;
+                }
+                if (!res.ok) {
+                    const errorText = await res.text();
+                    throw new Error(`HTTP ${res.status}: ${errorText}`);
+                }
+                return res.json();
+            } catch (err) {
+                if (attempt === retries - 1) throw err;
+                await new Promise(r => setTimeout(r, 500 * Math.pow(2, attempt)));
+            }
         }
-        return res.json();
     }
 
     async function fetchAllRecords() {
@@ -257,7 +262,14 @@
     }
 
     async function syncToCloud() {
-        if (!ACCESS_TOKEN || !BASE_ID) return;
+        if (!ACCESS_TOKEN || !BASE_ID || isSyncing) return;
+        isSyncing = true;
+        const now = Date.now();
+        if (now - lastSyncTime < 400) {
+            isSyncing = false;
+            return;
+        }
+        lastSyncTime = now;
         updateSyncIndicator('syncing');
         try {
             const all = [];
@@ -274,6 +286,10 @@
             const existingMap = new Map();
             for (let rec of existing) existingMap.set(rec.id, rec);
 
+            // Batch operations for efficiency
+            const patchBatch = [];
+            const postBatch = [];
+            
             for (let exp of all) {
                 const fields = {
                     Semester: exp.semester,
@@ -285,43 +301,77 @@
                     Type: exp.type
                 };
                 if (exp.id && exp.id.startsWith('rec')) {
-                    await upsertRecord(exp.id, fields);
+                    patchBatch.push({ id: exp.id, fields });
                 } else {
-                    const result = await upsertRecord(null, fields);
-                    if (result?.records?.[0]) exp.id = result.records[0].id;
+                    postBatch.push({ fields });
                 }
             }
             
-            const currentIds = new Set(all.map(e => e.id).filter(id => id?.startsWith('rec')));
-            for (let rec of existing) {
-                if (!currentIds.has(rec.id)) await deleteRecord(rec.id);
+            // Send patch requests
+            if (patchBatch.length > 0) {
+                for (let i = 0; i < patchBatch.length; i += 10) {
+                    const batch = patchBatch.slice(i, i + 10);
+                    await airtableRequest('PATCH', '', { records: batch });
+                }
             }
             
-            lastRemoteHash = computeDataHash({ fourYearData, currentSemester });
+            // Send post requests
+            if (postBatch.length > 0) {
+                for (let i = 0; i < postBatch.length; i += 10) {
+                    const batch = postBatch.slice(i, i + 10);
+                    const result = await airtableRequest('POST', '', { records: batch });
+                    if (result?.records) {
+                        result.records.forEach((rec, idx) => {
+                            const globalIdx = all.findIndex(e => !e.id);
+                            if (globalIdx !== -1) all[globalIdx].id = rec.id;
+                        });
+                    }
+                }
+            }
+            
+            // Delete records not in current data
+            const currentIds = new Set(all.map(e => e.id).filter(id => id?.startsWith('rec')));
+            const toDelete = [];
+            for (let rec of existing) {
+                if (!currentIds.has(rec.id)) toDelete.push(rec.id);
+            }
+            for (let id of toDelete) {
+                await deleteRecord(id);
+            }
+            
             updateSyncIndicator('success');
         } catch (err) {
             console.error('Sync error:', err);
             updateSyncIndicator('error');
+        } finally {
+            isSyncing = false;
         }
     }
 
+    async function debouncedSync() {
+        clearTimeout(syncTimeout);
+        syncTimeout = setTimeout(() => syncToCloud(), 300);
+    }
+
     async function pollForRemoteChanges() {
-        if (!ACCESS_TOKEN || !BASE_ID || isLoading) return;
+        if (!ACCESS_TOKEN || !BASE_ID || isLoading || isSyncing) return;
         try {
             const records = await fetchAllRecords();
             if (records.length === 0) return;
             
             const newData = recordsToData(records);
-            const currentHash = computeDataHash({ fourYearData: newData, currentSemester });
             
-            if (lastRemoteHash && lastRemoteHash !== currentHash) {
+            // Deep comparison to detect actual changes
+            const oldStr = JSON.stringify({ fourYearData, currentSemester });
+            const newStr = JSON.stringify({ fourYearData: newData, currentSemester });
+            
+            if (oldStr !== newStr) {
                 fourYearData = newData;
                 renderFourYear();
                 renderCurrent();
                 updateTotalsUI();
                 updateSyncIndicator('success');
             }
-            lastRemoteHash = currentHash;
         } catch (err) {
             console.error('Poll error:', err);
         }
@@ -341,10 +391,8 @@
                 fourYearData = recordsToData(records);
             }
             
-            lastRemoteHash = computeDataHash({ fourYearData, currentSemester });
-            
             if (pollInterval) clearInterval(pollInterval);
-            pollInterval = setInterval(pollForRemoteChanges, 2000);
+            pollInterval = setInterval(pollForRemoteChanges, 1000);
             
             isLoading = false;
             return true;
@@ -414,8 +462,22 @@
     async function seedDefaultData() {
         const defaultFour = getDefaultFourYear();
         for (let sem of defaultFour) {
+            const batch = [];
             for (let exp of sem.expenses) {
-                await upsertRecord(null, { Semester: sem.name, Expense: exp.desc, Parent: exp.parent, Amount: exp.amount, Status: exp.status, Comment: exp.comment, Type: 'fouryear' });
+                batch.push({
+                    fields: {
+                        Semester: sem.name,
+                        Expense: exp.desc,
+                        Parent: exp.parent,
+                        Amount: exp.amount,
+                        Status: exp.status,
+                        Comment: exp.comment,
+                        Type: 'fouryear'
+                    }
+                });
+            }
+            for (let i = 0; i < batch.length; i += 10) {
+                await airtableRequest('POST', '', { records: batch.slice(i, i + 10) });
             }
         }
     }
@@ -605,7 +667,7 @@
         document.getElementById('statusMsg').innerHTML = '<span class="warning">Loading...</span>';
         const success = await loadData();
         if (success) {
-            document.getElementById('statusMsg').innerHTML = '<span class="success">✅ Loaded! Real-time sync active. Polling every 2 seconds.</span>';
+            document.getElementById('statusMsg').innerHTML = '<span class="success">✅ Loaded! Real-time sync active. Polling every 1 second.</span>';
             renderFourYear(); 
             renderCurrent(); 
             updateTotalsUI();

@@ -144,6 +144,7 @@
     let isSyncing = false;
     let isLoading = false;
     let lastSyncTime = 0;
+    let lastKnownHash = null;
 
     function updateSyncIndicator(status = 'ready', message = null) {
         const indicator = document.getElementById('syncIndicator');
@@ -161,6 +162,14 @@
             setTimeout(() => updateSyncIndicator('ready'), 1000);
         } else {
             indicator.textContent = '✅ Ready';
+        }
+    }
+
+    function computeHash(data) {
+        try {
+            return JSON.stringify(data).split('').reduce((a, b) => ((a << 5) - a) + b.charCodeAt(0), 0).toString();
+        } catch {
+            return 'error';
         }
     }
 
@@ -333,6 +342,7 @@
                 await deleteRecord(id);
             }
             
+            lastKnownHash = computeHash({ fourYearData, currentSemester });
             updateSyncIndicator('success');
         } catch (err) {
             console.error('Sync error:', err);
@@ -354,12 +364,12 @@
             if (records.length === 0) return;
             
             const newData = recordsToData(records);
+            const newState = { fourYearData: newData, currentSemester };
+            const newHash = computeHash(newState);
             
-            const oldStr = JSON.stringify({ fourYearData, currentSemester });
-            const newStr = JSON.stringify({ fourYearData: newData, currentSemester });
-            
-            if (oldStr !== newStr) {
+            if (lastKnownHash !== newHash) {
                 fourYearData = newData;
+                lastKnownHash = newHash;
                 renderFourYear();
                 renderCurrent();
                 updateTotalsUI();
@@ -383,6 +393,8 @@
             } else {
                 fourYearData = recordsToData(records);
             }
+            
+            lastKnownHash = computeHash({ fourYearData, currentSemester });
             
             if (pollInterval) clearInterval(pollInterval);
             pollInterval = setInterval(pollForRemoteChanges, 1000);
@@ -501,12 +513,21 @@
         return { paiPaid, paiPartial, paiPending, maePaid, maePartial, maePending };
     }
 
+    function destroyAllCharts() {
+        for (let key in charts) {
+            if (charts[key]) {
+                charts[key].destroy();
+                charts[key] = null;
+            }
+        }
+        charts = {};
+    }
+
     function updateAllCharts() {
+        destroyAllCharts();
+        
         let { paid, partial, pending } = computeTotals();
         let { paiPaid, paiPartial, paiPending, maePaid, maePartial, maePending } = computeParentDetails();
-
-        const destroyChart = (name) => { if (charts[name]) { charts[name].destroy(); charts[name] = null; } };
-        destroyChart('overall'); destroyChart('pai'); destroyChart('mae'); destroyChart('contrib');
 
         charts.overall = new Chart(document.getElementById('overallChart'), {
             type: 'doughnut',

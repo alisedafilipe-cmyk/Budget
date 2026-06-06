@@ -138,11 +138,9 @@
     const TABLE = 'Budget';
     let fourYearData = [];
     let currentSemester = { name: "📌 Current Semester", expenses: [] };
-    let simActive = false, simAdjust = 0;
     let charts = {};
     let syncTimeout = null;
     let pollInterval = null;
-    let pendingChanges = {};
     let isSyncing = false;
     let isLoading = false;
     let lastSyncTime = 0;
@@ -180,7 +178,7 @@
         for (let attempt = 0; attempt < retries; attempt++) {
             try {
                 const res = await fetch(url, options);
-                if (res.status === 429) { // Rate limited
+                if (res.status === 429) {
                     const waitTime = Math.min(1000 * Math.pow(2, attempt), 5000);
                     await new Promise(r => setTimeout(r, waitTime));
                     continue;
@@ -286,7 +284,6 @@
             const existingMap = new Map();
             for (let rec of existing) existingMap.set(rec.id, rec);
 
-            // Batch operations for efficiency
             const patchBatch = [];
             const postBatch = [];
             
@@ -307,7 +304,6 @@
                 }
             }
             
-            // Send patch requests
             if (patchBatch.length > 0) {
                 for (let i = 0; i < patchBatch.length; i += 10) {
                     const batch = patchBatch.slice(i, i + 10);
@@ -315,7 +311,6 @@
                 }
             }
             
-            // Send post requests
             if (postBatch.length > 0) {
                 for (let i = 0; i < postBatch.length; i += 10) {
                     const batch = postBatch.slice(i, i + 10);
@@ -329,7 +324,6 @@
                 }
             }
             
-            // Delete records not in current data
             const currentIds = new Set(all.map(e => e.id).filter(id => id?.startsWith('rec')));
             const toDelete = [];
             for (let rec of existing) {
@@ -361,7 +355,6 @@
             
             const newData = recordsToData(records);
             
-            // Deep comparison to detect actual changes
             const oldStr = JSON.stringify({ fourYearData, currentSemester });
             const newStr = JSON.stringify({ fourYearData: newData, currentSemester });
             
@@ -408,50 +401,44 @@
         const result = [];
         for (let name of fourYearSemesters) result.push({ id: name, name, expenses: [] });
         
-        // Fall 2025 (Freshman)
         result[0].expenses = [
-            { desc: "15 Creditos", amount: 16549, parent: "pai", status: "paid", comment: "" },
-            { desc: "Moradia Honors", amount: 4800, parent: "pai", status: "paid", comment: "" },
-            { desc: "K Sig. (Meal+)", amount: 2832, parent: "pai", status: "paid", comment: "" },
-            { desc: "Mesada", amount: 250, parent: "mae", status: "paid", comment: "" },
-            { desc: "Outros", amount: 581, parent: "mae", status: "paid", comment: "" }
+            { id: null, desc: "15 Creditos", amount: 16549, parent: "pai", status: "paid", comment: "" },
+            { id: null, desc: "Moradia Honors", amount: 4800, parent: "pai", status: "paid", comment: "" },
+            { id: null, desc: "K Sig. (Meal+)", amount: 2832, parent: "pai", status: "paid", comment: "" },
+            { id: null, desc: "Mesada", amount: 250, parent: "mae", status: "paid", comment: "" },
+            { id: null, desc: "Outros", amount: 581, parent: "mae", status: "paid", comment: "" }
         ];
         
-        // Spring 2026 (Freshman)
         result[1].expenses = [
-            { desc: "17 Creditos", amount: 18751, parent: "pai", status: "paid", comment: "" },
-            { desc: "Moradia Honors", amount: 4800, parent: "pai", status: "paid", comment: "" },
-            { desc: "Mesada", amount: 100, parent: "mae", status: "paid", comment: "" },
-            { desc: "Outros", amount: 150, parent: "mae", status: "paid", comment: "" }
+            { id: null, desc: "17 Creditos", amount: 18751, parent: "pai", status: "paid", comment: "" },
+            { id: null, desc: "Moradia Honors", amount: 4800, parent: "pai", status: "paid", comment: "" },
+            { id: null, desc: "Mesada", amount: 100, parent: "mae", status: "paid", comment: "" },
+            { id: null, desc: "Outros", amount: 150, parent: "mae", status: "paid", comment: "" }
         ];
         
-        // Summer 2026
         result[2].expenses = [
-            { desc: "Tuition & Housing", amount: 20000, parent: "pai", status: "pending", comment: "estimate" }
+            { id: null, desc: "Tuition & Housing", amount: 20000, parent: "pai", status: "pending", comment: "estimate" }
         ];
         
-        // Fall 2026 (Sophomore) - Template for copying
         const fall2026Template = [
-            { desc: "15 Creditos", amount: 16549, parent: "pai", status: "pending", comment: "" },
-            { desc: "Moradia K.Sig", amount: 2950, parent: "pai", status: "pending", comment: "" },
-            { desc: "K Sig. (Meal+ Member)", amount: 2855, parent: "pai", status: "pending", comment: "" },
-            { desc: "Mercado P. Comida", amount: 1700, parent: "pai", status: "pending", comment: "" },
-            { desc: "Health Insu.", amount: 1500, parent: "pai", status: "pending", comment: "" },
-            { desc: "Ticket Ago-Dez", amount: 1100, parent: "mae", status: "paid", comment: "" },
-            { desc: "Mesada", amount: 1000, parent: "pai", status: "pending", comment: "" },
-            { desc: "Student Edge + AI", amount: 305, parent: "pai", status: "pending", comment: "" },
-            { desc: "Bonus GPA", amount: 250, parent: "pai", status: "pending", comment: "" },
-            { desc: "Comida Fora", amount: 236, parent: "pai", status: "pending", comment: "" },
-            { desc: "Lavanderia, Barbeiro (3x Sem, Celular ano, Livros", amount: 188, parent: "pai", status: "pending", comment: "" },
-            { desc: "Compras/Farmacia", amount: 165, parent: "pai", status: "pending", comment: "" },
-            { desc: "Compras pro Dorm na Frat", amount: 125, parent: "mae", status: "paid", comment: "" },
-            { desc: "Uber", amount: 30, parent: "pai", status: "pending", comment: "" }
+            { id: null, desc: "15 Creditos", amount: 16549, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Moradia K.Sig", amount: 2950, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "K Sig. (Meal+ Member)", amount: 2855, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Mercado P. Comida", amount: 1700, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Health Insu.", amount: 1500, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Ticket Ago-Dez", amount: 1100, parent: "mae", status: "paid", comment: "" },
+            { id: null, desc: "Mesada", amount: 1000, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Student Edge + AI", amount: 305, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Bonus GPA", amount: 250, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Comida Fora", amount: 236, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Lavanderia, Barbeiro (3x Sem, Celular ano, Livros", amount: 188, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Compras/Farmacia", amount: 165, parent: "pai", status: "pending", comment: "" },
+            { id: null, desc: "Compras pro Dorm na Frat", amount: 125, parent: "mae", status: "paid", comment: "" },
+            { id: null, desc: "Uber", amount: 30, parent: "pai", status: "pending", comment: "" }
         ];
         
-        // Copy Fall 2026 template to result[3] (Fall 2026 itself)
         result[3].expenses = JSON.parse(JSON.stringify(fall2026Template));
         
-        // Copy Fall 2026 template to Spring 2027 onwards
         for (let i = 4; i < result.length; i++) {
             result[i].expenses = JSON.parse(JSON.stringify(fall2026Template));
         }
@@ -607,24 +594,129 @@
     }
 
     async function syncAndRender() {
+        renderFourYear(); 
+        renderCurrent(); 
+        updateTotalsUI();
         await debouncedSync();
-        renderFourYear(); renderCurrent(); updateTotalsUI();
     }
 
-    window.editFourYearDesc = async (semId, idx) => { let sem = fourYearData.find(s=>s.id===semId); if(sem){ let v = prompt('Edit:', sem.expenses[idx].desc); if(v && v.trim()){ sem.expenses[idx].desc = v.trim(); await syncAndRender(); } } };
-    window.toggleFourYearParent = async (semId, idx) => { let sem = fourYearData.find(s=>s.id===semId); if(sem){ sem.expenses[idx].parent = sem.expenses[idx].parent==='pai'?'mae':'pai'; await syncAndRender(); } };
-    window.editFourYearAmount = async (semId, idx) => { let sem = fourYearData.find(s=>s.id===semId); if(sem){ let v = prompt('Amount:', sem.expenses[idx].amount); if(v && !isNaN(parseFloat(v))){ sem.expenses[idx].amount = Math.abs(parseFloat(v)); sem.expenses.sort((a,b)=>b.amount - a.amount); await syncAndRender(); } } };
-    window.cycleFourYearStatus = async (semId, idx) => { let sem = fourYearData.find(s=>s.id===semId); if(sem){ let c = sem.expenses[idx].status; sem.expenses[idx].status = c==='paid'?'partial':(c==='partial'?'pending':'paid'); await syncAndRender(); } };
-    window.editFourYearComment = async (semId, idx) => { let sem = fourYearData.find(s=>s.id===semId); if(sem){ let v = prompt('Comment:', sem.expenses[idx].comment||''); if(v!==null){ sem.expenses[idx].comment = v.trim(); await syncAndRender(); } } };
-    async function deleteFourYearExpense(semId, idx) { if(confirm('Delete?')){ let sem = fourYearData.find(s=>s.id===semId); sem.expenses.splice(idx,1); await syncAndRender(); } }
-    window.addFourYearExpense = async (semId) => { let desc = prompt('Expense name:'); if(!desc) return; let amt = parseFloat(prompt('Amount:')); if(isNaN(amt)) return; let parent = prompt('Responsible (pai/mae):').toLowerCase(); if(parent!=='pai' && parent!=='mae') return; let comment = prompt('Comment:', ''); let sem = fourYearData.find(s=>s.id===semId); sem.expenses.push({ desc, amount: amt, parent, status: 'pending', comment: comment||'' }); sem.expenses.sort((a,b)=>b.amount - a.amount); await syncAndRender(); }
+    window.editFourYearDesc = async (semId, idx) => { 
+        let sem = fourYearData.find(s=>s.id===semId); 
+        if(sem && sem.expenses[idx]){ 
+            let v = prompt('Edit:', sem.expenses[idx].desc); 
+            if(v && v.trim()){ 
+                sem.expenses[idx].desc = v.trim(); 
+                await syncAndRender(); 
+            } 
+        } 
+    };
+    window.toggleFourYearParent = async (semId, idx) => { 
+        let sem = fourYearData.find(s=>s.id===semId); 
+        if(sem && sem.expenses[idx]){ 
+            sem.expenses[idx].parent = sem.expenses[idx].parent==='pai'?'mae':'pai'; 
+            await syncAndRender(); 
+        } 
+    };
+    window.editFourYearAmount = async (semId, idx) => { 
+        let sem = fourYearData.find(s=>s.id===semId); 
+        if(sem && sem.expenses[idx]){ 
+            let v = prompt('Amount:', sem.expenses[idx].amount); 
+            if(v && !isNaN(parseFloat(v))){ 
+                sem.expenses[idx].amount = Math.abs(parseFloat(v)); 
+                sem.expenses.sort((a,b)=>b.amount - a.amount); 
+                await syncAndRender(); 
+            } 
+        } 
+    };
+    window.cycleFourYearStatus = async (semId, idx) => { 
+        let sem = fourYearData.find(s=>s.id===semId); 
+        if(sem && sem.expenses[idx]){ 
+            let c = sem.expenses[idx].status; 
+            sem.expenses[idx].status = c==='paid'?'partial':(c==='partial'?'pending':'paid'); 
+            await syncAndRender(); 
+        } 
+    };
+    window.editFourYearComment = async (semId, idx) => { 
+        let sem = fourYearData.find(s=>s.id===semId); 
+        if(sem && sem.expenses[idx]){ 
+            let v = prompt('Comment:', sem.expenses[idx].comment||''); 
+            if(v!==null){ 
+                sem.expenses[idx].comment = v.trim(); 
+                await syncAndRender(); 
+            } 
+        } 
+    };
+    async function deleteFourYearExpense(semId, idx) { 
+        if(confirm('Delete?')){ 
+            let sem = fourYearData.find(s=>s.id===semId); 
+            if(sem) {
+                sem.expenses.splice(idx,1); 
+                await syncAndRender(); 
+            }
+        } 
+    }
+    window.addFourYearExpense = async (semId) => { 
+        let desc = prompt('Expense name:'); 
+        if(!desc) return; 
+        let amt = parseFloat(prompt('Amount:')); 
+        if(isNaN(amt)) return; 
+        let parent = prompt('Responsible (pai/mae):').toLowerCase(); 
+        if(parent!=='pai' && parent!=='mae') return; 
+        let comment = prompt('Comment:', ''); 
+        let sem = fourYearData.find(s=>s.id===semId); 
+        if(sem) {
+            sem.expenses.push({ id: null, desc, amount: amt, parent, status: 'pending', comment: comment||'' }); 
+            sem.expenses.sort((a,b)=>b.amount - a.amount); 
+            await syncAndRender(); 
+        }
+    }
 
-    window.editCurrentDesc = async (idx) => { let v = prompt('Edit:', currentSemester.expenses[idx].desc); if(v && v.trim()){ currentSemester.expenses[idx].desc = v.trim(); await syncAndRender(); } };
-    window.toggleCurrentParent = async (idx) => { currentSemester.expenses[idx].parent = currentSemester.expenses[idx].parent==='pai'?'mae':'pai'; await syncAndRender(); };
-    window.editCurrentAmount = async (idx) => { let v = prompt('Amount:', currentSemester.expenses[idx].amount); if(v && !isNaN(parseFloat(v))){ currentSemester.expenses[idx].amount = Math.abs(parseFloat(v)); await syncAndRender(); } };
-    window.cycleCurrentStatus = async (idx) => { let c = currentSemester.expenses[idx].status; currentSemester.expenses[idx].status = c==='paid'?'partial':(c==='partial'?'pending':'paid'); await syncAndRender(); };
-    window.editCurrentComment = async (idx) => { let v = prompt('Comment:', currentSemester.expenses[idx].comment||''); if(v!==null){ currentSemester.expenses[idx].comment = v.trim(); await syncAndRender(); } };
-    async function deleteCurrentExpense(idx) { if(confirm('Delete?')){ currentSemester.expenses.splice(idx,1); await syncAndRender(); } }
+    window.editCurrentDesc = async (idx) => { 
+        if(currentSemester.expenses[idx]){
+            let v = prompt('Edit:', currentSemester.expenses[idx].desc); 
+            if(v && v.trim()){ 
+                currentSemester.expenses[idx].desc = v.trim(); 
+                await syncAndRender(); 
+            } 
+        }
+    };
+    window.toggleCurrentParent = async (idx) => { 
+        if(currentSemester.expenses[idx]){
+            currentSemester.expenses[idx].parent = currentSemester.expenses[idx].parent==='pai'?'mae':'pai'; 
+            await syncAndRender(); 
+        }
+    };
+    window.editCurrentAmount = async (idx) => { 
+        if(currentSemester.expenses[idx]){
+            let v = prompt('Amount:', currentSemester.expenses[idx].amount); 
+            if(v && !isNaN(parseFloat(v))){ 
+                currentSemester.expenses[idx].amount = Math.abs(parseFloat(v)); 
+                await syncAndRender(); 
+            } 
+        }
+    };
+    window.cycleCurrentStatus = async (idx) => { 
+        if(currentSemester.expenses[idx]){
+            let c = currentSemester.expenses[idx].status; 
+            currentSemester.expenses[idx].status = c==='paid'?'partial':(c==='partial'?'pending':'paid'); 
+            await syncAndRender(); 
+        }
+    };
+    window.editCurrentComment = async (idx) => { 
+        if(currentSemester.expenses[idx]){
+            let v = prompt('Comment:', currentSemester.expenses[idx].comment||''); 
+            if(v!==null){ 
+                currentSemester.expenses[idx].comment = v.trim(); 
+                await syncAndRender(); 
+            } 
+        }
+    };
+    async function deleteCurrentExpense(idx) { 
+        if(confirm('Delete?')){ 
+            currentSemester.expenses.splice(idx,1); 
+            await syncAndRender(); 
+        } 
+    }
 
     function exportCSV() {
         let rows = [['Type','Semester','Expense','Parent','Amount','Status','Comment']];
@@ -678,11 +770,39 @@
 
     document.getElementById('saveBtn').addEventListener('click', saveAndLoad);
     document.getElementById('testBtn').addEventListener('click', testConnection);
-    document.getElementById('addCurrentBtn').addEventListener('click', async () => { let desc = prompt('Name:'); if(desc) { let amt = parseFloat(prompt('Amount:')); if(!isNaN(amt)) { let parent = prompt('pai/mae?').toLowerCase(); if(parent==='pai' || parent==='mae') { currentSemester.expenses.push({ desc, amount: amt, parent, status: 'pending', comment: '' }); await syncAndRender(); } } } });
-    document.getElementById('editSemesterNameBtn').addEventListener('click', async () => { let newName = prompt('Name:', currentSemester.name); if(newName) { currentSemester.name = newName.trim(); await syncAndRender(); } });
-    document.getElementById('clearCurrentBtn').addEventListener('click', async () => { if(confirm('Clear all?')) { currentSemester.expenses = []; await syncAndRender(); } });
+    document.getElementById('addCurrentBtn').addEventListener('click', async () => { 
+        let desc = prompt('Name:'); 
+        if(desc) { 
+            let amt = parseFloat(prompt('Amount:')); 
+            if(!isNaN(amt)) { 
+                let parent = prompt('pai/mae?').toLowerCase(); 
+                if(parent==='pai' || parent==='mae') { 
+                    currentSemester.expenses.push({ id: null, desc, amount: amt, parent, status: 'pending', comment: '' }); 
+                    await syncAndRender(); 
+                } 
+            } 
+        } 
+    });
+    document.getElementById('editSemesterNameBtn').addEventListener('click', async () => { 
+        let newName = prompt('Name:', currentSemester.name); 
+        if(newName) { 
+            currentSemester.name = newName.trim(); 
+            await syncAndRender(); 
+        } 
+    });
+    document.getElementById('clearCurrentBtn').addEventListener('click', async () => { 
+        if(confirm('Clear all?')) { 
+            currentSemester.expenses = []; 
+            await syncAndRender(); 
+        } 
+    });
     document.getElementById('exportBtn').addEventListener('click', exportCSV);
-    document.getElementById('resetDefaultBtn').addEventListener('click', async () => { if(confirm('Reset 4-year?')) { fourYearData = getDefaultFourYear(); await syncAndRender(); } });
+    document.getElementById('resetDefaultBtn').addEventListener('click', async () => { 
+        if(confirm('Reset 4-year?')) { 
+            fourYearData = getDefaultFourYear(); 
+            await syncAndRender(); 
+        } 
+    });
 
     document.addEventListener('visibilitychange', () => {
         if (!document.hidden) pollForRemoteChanges();
